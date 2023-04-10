@@ -4,15 +4,16 @@ const MiniCssExtractPlugin=require("mini-css-extract-plugin")
 const CssMinimizerWebpackPlugin=require("css-minimizer-webpack-plugin")
 const TerserWebpackPlugin=require("terser-webpack-plugin")
 const CopyPlugin=require("copy-webpack-plugin")
-
+const ReactRefreshWebpackPlugin = require('@pmmmwh/react-refresh-webpack-plugin');
 // const ImageMinimizerPlugin=require("image-minimizer-plugin")//图片压缩
 
-
+// 获取cross-env 定义的环境变量
+const IsProduction=process.env.NODE_ENV==="production"
 
 const path = require("path")
 const getStyleLoader = (pre) => {
     return [
-        MiniCssExtractPlugin.loader,
+        IsProduction?MiniCssExtractPlugin.loader:"style-loader",
         "css-loader",
         // 处理css兼容性问题，还需在broswerlist来指定兼容
         {
@@ -30,9 +31,9 @@ const getStyleLoader = (pre) => {
 module.exports = {
     entry: "./src/main.js",
     output: {
-        path: path.resolve(__dirname,"../dist"),
-        filename: "static/js/[name].[contenthash:10].js",
-        chunkFilename: "static/js/[name].[contenthash:10].chunk.js",
+        path: IsProduction?path.resolve(__dirname,"../dist"):undefined ,
+        filename: IsProduction?"static/js/[name].[contenthash:10].js":"static/js/[name].js",
+        chunkFilename: IsProduction?"static/js/[name].[contenthash:10].chunk.js":"static/js/[name].chunk.js",
         assetModuleFilename: "static/media/[hash:10][ext][query]",
     },
     module: {
@@ -77,6 +78,9 @@ module.exports = {
                 options: {
                     cacheDirectory: true,
                     cacheCompression: false,
+                    plugins:[
+                        !IsProduction&&"react-refresh/babel" //激活react热刷新
+                     ].filter(Boolean)
                 }
             }
         ]
@@ -93,11 +97,13 @@ module.exports = {
             template: path.resolve(__dirname, "../public/index.html")
         }),
         // css单独提取
+        IsProduction &&
         new MiniCssExtractPlugin({
             filename:"static/css/[name].[contenthash:10].css",
             chunkFilename:"static/css/[name].[contenthash:10].chunk.css"
         }),
         // 复制公共资源
+        IsProduction &&
         new CopyPlugin({
             patterns:[
                 {
@@ -108,10 +114,13 @@ module.exports = {
                     }
                 }
             ]
-        })
-    ],
-    mode: "production",
-    devtool: "source-map",
+        }),
+        // js热刷新
+        !IsProduction &&
+        new ReactRefreshWebpackPlugin()
+    ].filter(Boolean),
+    mode: IsProduction?"production":"development",
+    devtool: IsProduction?"source-map":"cheap-module-source-map",
     // 代码分割
     optimization: {
         splitChunks: {
@@ -121,6 +130,8 @@ module.exports = {
         runtimeChunk: {
             name: entrypoint => `runtime~${entrypoint.name}.js`
         },
+        // 是否需要代码压缩
+        minimize:IsProduction,
         minimizer:[
             new CssMinimizerWebpackPlugin(),//优化压缩css代码
             new TerserWebpackPlugin(),      //压缩js代码
@@ -130,6 +141,13 @@ module.exports = {
         //webpack解析加载模块
         // 自动补全文件拓展名
         extensions:[".jsx",".js",".json"]
-
-    }
+    },
+    devServer: {
+        host: "localhost",
+        port: 3000,
+        open: true,
+        hot: true,
+        historyApiFallback:true //解决前端刷新404问题
+    },
+    performance:false,//关闭性能分析，提升打包速度
 }
